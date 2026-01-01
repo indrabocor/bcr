@@ -1,0 +1,5 @@
+{
+  "name": "Copy of BCR ERP - Sistem Manajemen Bisnis Terintegrasi",
+  "description": "Sebuah aplikasi ERP lengkap yang mencakup sistem kasir (POS), manajemen inventaris dengan fitur stock opname, pembukuan keuangan otomatis (buku besar), dan pelacakan beban operasional dengan bantuan AI Insights.",
+  "requestFramePermissions": []
+}
