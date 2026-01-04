@@ -1,22 +1,33 @@
 
-import React, { useState } from 'react';
-import { User, UserRole } from '../types';
-import { UserPlus, Users, Shield, UserCircle, Trash2, Key, AlertTriangle, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { User, UserRole, CashAdvance } from '../types';
+import { UserPlus, Users, Shield, UserCircle, Trash2, Key, AlertTriangle, X, Wallet, ArrowUpRight, ArrowDownRight, Banknote } from 'lucide-react';
 
 interface UserManagementProps {
   users: User[];
   onAddUser: (user: User) => void;
   onDeleteUser: (id: string) => void;
   currentUser: User;
+  cashAdvances: CashAdvance[];
+  onCashAdvance: (transaction: CashAdvance) => void;
 }
 
-const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onDeleteUser, currentUser }) => {
+const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onDeleteUser, currentUser, cashAdvances, onCashAdvance }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>(UserRole.STAFF);
   
   // State for Custom Confirmation Modal
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [financeUser, setFinanceUser] = useState<User | null>(null);
+
+  // Finance Modal States
+  const [amount, setAmount] = useState<number>(0);
+  const [notes, setNotes] = useState('');
+  const [transactionType, setTransactionType] = useState<'LOAN' | 'REPAYMENT'>('LOAN');
+
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +55,36 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onDel
       setUserToDelete(null);
     }
   };
+
+  const handleFinanceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!financeUser || amount <= 0) return;
+
+    onCashAdvance({
+      id: crypto.randomUUID(),
+      userId: financeUser.id,
+      userName: financeUser.username,
+      timestamp: Date.now(),
+      type: transactionType,
+      amount: amount,
+      notes: notes || (transactionType === 'LOAN' ? 'Pinjaman Karyawan' : 'Pelunasan Kasbon')
+    });
+
+    setAmount(0);
+    setNotes('');
+  };
+
+  const userFinanceHistory = useMemo(() => {
+    if (!financeUser) return [];
+    return cashAdvances.filter(c => c.userId === financeUser.id).sort((a, b) => b.timestamp - a.timestamp);
+  }, [cashAdvances, financeUser]);
+
+  const userBalance = useMemo(() => {
+    if (!financeUser) return 0;
+    const loans = cashAdvances.filter(c => c.userId === financeUser.id && c.type === 'LOAN').reduce((sum, c) => sum + c.amount, 0);
+    const repayments = cashAdvances.filter(c => c.userId === financeUser.id && c.type === 'REPAYMENT').reduce((sum, c) => sum + c.amount, 0);
+    return loans - repayments;
+  }, [cashAdvances, financeUser]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
@@ -154,15 +195,24 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onDel
                   </div>
                 </div>
                 
-                {user.id !== currentUser.id && (
-                  <button 
-                    onClick={() => setUserToDelete(user)}
-                    className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                    title="Hapus Pengguna"
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setFinanceUser(user)}
+                    className="px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-indigo-100"
                   >
-                    <Trash2 size={20} />
+                    <Wallet size={14} /> Kasbon
                   </button>
-                )}
+
+                  {user.id !== currentUser.id && (
+                    <button 
+                      onClick={() => setUserToDelete(user)}
+                      className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                      title="Hapus Pengguna"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -204,6 +254,119 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onDel
             >
               <X size={20} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Employee Finance (Kasbon) Modal */}
+      {financeUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col max-h-[90vh]">
+            <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+                    <Banknote size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Manajemen Kasbon</h3>
+                    <p className="text-sm opacity-70">Karyawan: {financeUser.username}</p>
+                  </div>
+               </div>
+               <button onClick={() => setFinanceUser(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-all"><X size={20} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+               {/* Balance Card */}
+               <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-lg shadow-indigo-600/20 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold opacity-70 uppercase tracking-widest mb-1">Total Hutang / Kasbon</p>
+                    <h2 className="text-3xl font-black">{formatCurrency(userBalance)}</h2>
+                  </div>
+                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                    <Wallet size={24} />
+                  </div>
+               </div>
+
+               {/* Transaction Form */}
+               <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                  <div className="flex gap-2 mb-4 p-1 bg-white rounded-xl border border-slate-200">
+                     <button 
+                       type="button" 
+                       onClick={() => setTransactionType('LOAN')}
+                       className={`flex-1 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${transactionType === 'LOAN' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                     >
+                       Beri Pinjaman (OUT)
+                     </button>
+                     <button 
+                       type="button" 
+                       onClick={() => setTransactionType('REPAYMENT')}
+                       className={`flex-1 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${transactionType === 'REPAYMENT' ? 'bg-green-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                     >
+                       Terima Bayaran (IN)
+                     </button>
+                  </div>
+
+                  <form onSubmit={handleFinanceSubmit} className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Nominal (IDR)</label>
+                      <input 
+                        type="number" 
+                        required
+                        className="w-full bg-white border border-slate-200 rounded-xl p-3 text-lg font-bold text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
+                        value={amount}
+                        onChange={e => setAmount(Number(e.target.value))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Catatan / Keterangan</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
+                        placeholder={transactionType === 'LOAN' ? "Keperluan pribadi, dsb..." : "Potong gaji bulan ini..."}
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      className={`w-full py-3 rounded-xl font-black text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 ${transactionType === 'LOAN' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20' : 'bg-green-600 hover:bg-green-700 shadow-green-600/20'}`}
+                    >
+                      {transactionType === 'LOAN' ? 'Catat Pengeluaran Kas' : 'Catat Pemasukan Kas'}
+                    </button>
+                  </form>
+               </div>
+
+               {/* History List */}
+               <div>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Riwayat Transaksi</h4>
+                  <div className="space-y-2">
+                    {userFinanceHistory.length > 0 ? userFinanceHistory.map(item => (
+                      <div key={item.id} className="p-4 bg-white border border-slate-100 rounded-2xl flex items-center justify-between">
+                         <div>
+                            <div className="flex items-center gap-2 mb-1">
+                               <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${item.type === 'LOAN' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                  {item.type === 'LOAN' ? 'PINJAMAN' : 'BAYAR'}
+                               </span>
+                               <span className="text-[10px] font-mono text-slate-400">
+                                 {new Date(item.timestamp).toLocaleDateString('id-ID')}
+                               </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-700">{item.notes}</p>
+                         </div>
+                         <div className={`font-black text-sm flex items-center gap-1 ${item.type === 'LOAN' ? 'text-red-600' : 'text-green-600'}`}>
+                            {item.type === 'LOAN' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                            {formatCurrency(item.amount)}
+                         </div>
+                      </div>
+                    )) : (
+                      <div className="text-center py-8 text-slate-300">
+                         <Wallet size={32} className="mx-auto mb-2 opacity-30" />
+                         <p className="text-xs">Belum ada riwayat kasbon</p>
+                      </div>
+                    )}
+                  </div>
+               </div>
+            </div>
           </div>
         </div>
       )}

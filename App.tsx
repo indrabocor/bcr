@@ -14,7 +14,7 @@ import {
   Users,
   Smartphone
 } from 'lucide-react';
-import { AppView, Product, Sale, Expense, StockLog, LedgerEntry, User, UserRole, ServiceRecord, ServiceStatus, Customer } from './types';
+import { AppView, Product, Sale, Expense, StockLog, LedgerEntry, User, UserRole, ServiceRecord, ServiceStatus, Customer, CashAdvance } from './types';
 import { INITIAL_PRODUCTS, TAX_RATE } from './constants';
 import Dashboard from './components/Dashboard';
 import POS from './components/POS';
@@ -77,6 +77,11 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [cashAdvances, setCashAdvances] = useState<CashAdvance[]>(() => {
+    const saved = localStorage.getItem('erp_cash_advances');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Sync with LocalStorage
   useEffect(() => {
     localStorage.setItem('erp_products', JSON.stringify(products));
@@ -87,7 +92,8 @@ const App: React.FC = () => {
     localStorage.setItem('erp_ledger', JSON.stringify(ledger));
     localStorage.setItem('erp_users', JSON.stringify(users));
     localStorage.setItem('erp_customers', JSON.stringify(customers));
-  }, [products, sales, services, expenses, stockLogs, ledger, users, customers]);
+    localStorage.setItem('erp_cash_advances', JSON.stringify(cashAdvances));
+  }, [products, sales, services, expenses, stockLogs, ledger, users, customers, cashAdvances]);
 
   // Handler Actions
   const handleNewSale = (sale: Sale) => {
@@ -279,6 +285,56 @@ const App: React.FC = () => {
     setLedger(prev => [...prev, ...reverseLedger]);
   };
 
+  const handleCashAdvanceTransaction = (transaction: CashAdvance) => {
+    setCashAdvances(prev => [...prev, transaction]);
+
+    let ledgerEntries: LedgerEntry[] = [];
+
+    if (transaction.type === 'LOAN') {
+      // Perusahaan mengeluarkan uang (Kredit Kas), Piutang Karyawan bertambah (Debit)
+      ledgerEntries = [
+        {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          description: `Kasbon Karyawan: ${transaction.userName} (${transaction.notes})`,
+          debit: 0,
+          credit: transaction.amount,
+          account: 'KAS'
+        },
+        {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          description: `Piutang Karyawan: ${transaction.userName}`,
+          debit: transaction.amount,
+          credit: 0,
+          account: 'PIUTANG_KARYAWAN'
+        }
+      ];
+    } else {
+      // Karyawan bayar/potong gaji (Debit Kas/Masuk), Piutang berkurang (Kredit)
+      ledgerEntries = [
+        {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          description: `Pelunasan Kasbon: ${transaction.userName}`,
+          debit: transaction.amount,
+          credit: 0,
+          account: 'KAS'
+        },
+        {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          description: `Pembayaran Piutang: ${transaction.userName}`,
+          debit: 0,
+          credit: transaction.amount,
+          account: 'PIUTANG_KARYAWAN'
+        }
+      ];
+    }
+
+    setLedger(prev => [...prev, ...ledgerEntries]);
+  };
+
   const handleStockAdjustment = (productId: string, type: 'IN' | 'OUT' | 'ADJUSTMENT', qty: number, reason: string) => {
     let logQty = qty;
     
@@ -352,6 +408,8 @@ const App: React.FC = () => {
                   onAddUser={(u) => setUsers(prev => [...prev, u])}
                   onDeleteUser={(id) => setUsers(prev => prev.filter(u => u.id !== id))}
                   currentUser={currentUser}
+                  cashAdvances={cashAdvances}
+                  onCashAdvance={handleCashAdvanceTransaction}
                 />;
       default:
         return <Dashboard sales={sales} expenses={expenses} products={products} services={services} />;

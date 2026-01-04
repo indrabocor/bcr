@@ -120,3 +120,13 @@ export interface LedgerEntry {
   credit: number;
   account: string; // e.g., 'CASH', 'SALES', 'EXPENSE', 'INVENTORY', 'SERVICE_REVENUE'
 }
+
+export interface CashAdvance {
+  id: string;
+  userId: string;
+  userName: string;
+  timestamp: number;
+  type: 'LOAN' | 'REPAYMENT'; // LOAN = Hutang (Ambil uang), REPAYMENT = Bayar (Balikin uang)
+  amount: number;
+  notes: string;
+}

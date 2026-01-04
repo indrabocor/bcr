@@ -48,7 +48,8 @@ import {
   Activity,
   Zap,
   Cpu,
-  Layers
+  Layers,
+  ClipboardList
 } from 'lucide-react';
 import { ServiceRecord, ServiceStatus, Product, SaleItem, User as UserType, Customer } from '../types';
 import html2canvas from 'html2canvas';
@@ -76,8 +77,12 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [viewType, setViewType] = useState<'GRID' | 'TABLE'>('GRID');
   
-  // Confirmation state for cancellation
+  // History Modal State
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  
+  // Confirmation state for cancellation & refund
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [showRefundConfirm, setShowRefundConfirm] = useState<string | null>(null);
 
   // Calculator State for Modal
   const [isCalcOpen, setIsCalcOpen] = useState(false);
@@ -237,6 +242,20 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
     const service = services.find(s => s.id === id);
     if (service) {
       updateStatus(service, ServiceStatus.CANCELLED);
+    }
+  };
+
+  const handleRefundService = (id: string) => {
+    const service = services.find(s => s.id === id);
+    if (service) {
+      updateStatus(service, ServiceStatus.REFUNDED);
+    }
+    setShowRefundConfirm(null);
+  };
+
+  const saveNotes = () => {
+    if (viewingService) {
+      onUpdateService(viewingService);
     }
   };
 
@@ -504,6 +523,13 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                 <p className="font-black text-sm">{formatDate(viewingService?.timestamp)}</p>
               </div>
               
+              {viewingService?.completedDate && (
+                <div className="text-right">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Tanggal Selesai</span>
+                    <p className="font-black text-sm">{formatDate(viewingService?.completedDate)}</p>
+                </div>
+              )}
+
               <div className="flex gap-4">
                 {viewingService?.devicePattern && (
                   <div className="text-right space-y-2">
@@ -778,7 +804,23 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                       </div>
                    </div>
                 </div>
-                <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 active:scale-95 transition-all">Simpan Pendaftaran Service</button>
+                <div className="flex gap-4 pt-4">
+                   <button 
+                      type="button" 
+                      onClick={() => {
+                        setShowAddModal(false);
+                        setFormData({
+                          customerId: '', customerName: '', customerPhone: '', deviceModel: '', imei: '', devicePattern: '', devicePassword: '', problemDescription: '', estimatedCost: 0, serviceFee: 0,
+                          warrantyDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        });
+                        setCustomerSearch('');
+                      }}
+                      className="flex-1 py-5 bg-slate-100 text-slate-600 rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-slate-200 active:scale-95 transition-all"
+                   >
+                      Batal
+                   </button>
+                   <button type="submit" className="flex-[2] py-5 bg-blue-600 text-white rounded-2xl font-black text-lg uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 active:scale-95 transition-all">Simpan Pendaftaran Service</button>
+                </div>
              </form>
           </div>
         </div>
@@ -815,7 +857,7 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                       <div className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100">
                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Update Status Perangkat</h4>
                          <div className="flex flex-wrap gap-2">
-                            {viewingService.status !== ServiceStatus.CANCELLED && viewingService.status !== ServiceStatus.PICKED_UP && (
+                            {viewingService.status !== ServiceStatus.CANCELLED && viewingService.status !== ServiceStatus.PICKED_UP && viewingService.status !== ServiceStatus.REFUNDED && (
                               <>
                                 {viewingService.status === ServiceStatus.PENDING && (
                                   <button onClick={() => updateStatus(viewingService, ServiceStatus.IN_PROGRESS)} className="px-5 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20 active:scale-95 transition-all">Mulai Kerjakan</button>
@@ -829,11 +871,20 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                                 <button onClick={() => setConfirmCancelId(viewingService.id)} className="px-5 py-3 bg-white border-2 border-red-200 text-red-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-50 active:scale-95 transition-all">Batalkan</button>
                               </>
                             )}
-                            {viewingService.status === ServiceStatus.PICKED_UP && (
-                               <button onClick={() => updateStatus(viewingService, ServiceStatus.WARRANTY_CLAIM)} className="px-5 py-3 bg-purple-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-purple-600/20 active:scale-95 transition-all">Terima Klaim Garansi</button>
+                            
+                            {(viewingService.status === ServiceStatus.PICKED_UP || viewingService.status === ServiceStatus.WARRANTY_CLAIM) && (
+                               <>
+                                <button onClick={() => updateStatus(viewingService, ServiceStatus.WARRANTY_CLAIM)} className="px-5 py-3 bg-purple-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-purple-600/20 active:scale-95 transition-all flex items-center gap-2">
+                                   <RefreshCw size={14} /> Terima Klaim Garansi
+                                </button>
+                                <button onClick={() => setShowRefundConfirm(viewingService.id)} className="px-5 py-3 bg-rose-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-600/20 active:scale-95 transition-all flex items-center gap-2">
+                                   <RotateCcw size={14} /> Kembalikan Dana (Refund)
+                                </button>
+                               </>
                             )}
+
                             {viewingService.status === ServiceStatus.WARRANTY_CLAIM && (
-                               <button onClick={() => updateStatus(viewingService, ServiceStatus.COMPLETED)} className="px-5 py-3 bg-green-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-green-600/20 active:scale-95 transition-all">Klaim Selesai</button>
+                               <button onClick={() => updateStatus(viewingService, ServiceStatus.COMPLETED)} className="px-5 py-3 bg-green-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-green-600/20 active:scale-95 transition-all">Service Klaim Selesai</button>
                             )}
                          </div>
                       </div>
@@ -859,12 +910,32 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                                   )}
                                </div>
                             </div>
+                            
+                            {/* Catatan Teknisi Section */}
+                            <div className="mt-8 pt-8 border-t border-slate-100">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Catatan Teknisi & Diagnosa</h4>
+                                    <button
+                                        onClick={saveNotes}
+                                        className="px-4 py-2 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2"
+                                    >
+                                        <CheckCircle2 size={12} /> Simpan Catatan
+                                    </button>
+                                </div>
+                                <textarea
+                                    className="w-full h-32 p-4 bg-yellow-50/50 border-2 border-yellow-100 rounded-2xl focus:border-yellow-400 focus:bg-yellow-50 outline-none font-medium text-slate-700 text-sm resize-none leading-relaxed"
+                                    placeholder="Tulis hasil diagnosa, langkah perbaikan, atau catatan internal teknisi di sini..."
+                                    value={viewingService.notes || ''}
+                                    onChange={(e) => setViewingService({ ...viewingService, notes: e.target.value })}
+                                ></textarea>
+                                <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase text-right">Catatan ini bersifat internal dan tidak tercetak di nota pelanggan.</p>
+                            </div>
                          </div>
 
                          <div className="space-y-4">
                             <div className="flex justify-between items-center">
                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Suku Cadang / Parts</h4>
-                               {viewingService.status !== ServiceStatus.PICKED_UP && viewingService.status !== ServiceStatus.CANCELLED && (
+                               {viewingService.status !== ServiceStatus.PICKED_UP && viewingService.status !== ServiceStatus.CANCELLED && viewingService.status !== ServiceStatus.REFUNDED && (
                                  <button onClick={() => setShowPartPicker(true)} className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">+ Tambah Part</button>
                                )}
                             </div>
@@ -877,7 +948,7 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                                     </div>
                                     <div className="flex items-center gap-3">
                                        <span className="font-black text-blue-700 text-xs">{formatCurrency(part.total)}</span>
-                                       {viewingService.status !== ServiceStatus.PICKED_UP && viewingService.status !== ServiceStatus.CANCELLED && (
+                                       {viewingService.status !== ServiceStatus.PICKED_UP && viewingService.status !== ServiceStatus.CANCELLED && viewingService.status !== ServiceStatus.REFUNDED && (
                                           <button onClick={() => removePartFromService(part.productId)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
                                        )}
                                     </div>
@@ -912,6 +983,9 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                             </div>
                          </div>
                          <div className="mt-8 space-y-3">
+                            <button onClick={handlePrint} className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-200 transition-all">
+                                <Printer size={18} /> Cetak Nota Fisik
+                            </button>
                             <button onClick={shareToWhatsApp} className="w-full py-4 bg-green-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-green-700 transition-all"><MessageCircle size={18} /> Kirim Ke WhatsApp</button>
                             <button onClick={downloadPDF} disabled={isGeneratingPdf} className="w-full py-4 bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-700 transition-all">
                                {isGeneratingPdf ? <RefreshCw size={18} className="animate-spin" /> : <FileDown size={18} />} Simpan PDF
@@ -920,6 +994,16 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                       </div>
 
                       <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm space-y-6">
+                         <div>
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Tanggal Selesai (Completed)</h4>
+                            <input 
+                              type="date" 
+                              readOnly
+                              className="w-full border-2 border-slate-200 p-3 rounded-xl bg-slate-100 text-slate-600 outline-none font-black text-xs cursor-not-allowed opacity-75" 
+                              value={viewingService.completedDate ? new Date(viewingService.completedDate).toISOString().split('T')[0] : ''}
+                            />
+                            <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase">Terisi otomatis saat status Selesai / Diambil.</p>
+                         </div>
                          <div>
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Masa Garansi</h4>
                             <input 
@@ -930,10 +1014,29 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                             />
                             <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase">Gunakan nota asli untuk klaim garansi.</p>
                          </div>
+                         
                          <div className="pt-6 border-t border-slate-100">
-                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Informasi Pelanggan</h4>
-                            <p className="font-black text-slate-900 uppercase text-sm">{viewingService.customerName}</p>
-                            <p className="text-xs font-bold text-slate-500">{viewingService.customerPhone}</p>
+                            <div className="flex justify-between items-center mb-4">
+                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Informasi Pelanggan</h4>
+                               {customerHistory.length > 0 && (
+                                 <button 
+                                   onClick={() => setShowHistoryModal(true)}
+                                   className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all active:scale-95 border border-indigo-100"
+                                 >
+                                    <History size={14} />
+                                    <span className="text-[9px] font-black uppercase tracking-wider">Riwayat ({customerHistory.length})</span>
+                                 </button>
+                               )}
+                            </div>
+                            <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                               <div className="p-3 bg-white rounded-xl text-slate-400 shadow-sm border border-slate-100">
+                                  <User size={20} />
+                               </div>
+                               <div>
+                                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">{viewingService.customerName}</p>
+                                  <p className="text-xs font-bold text-slate-500 mt-0.5">{viewingService.customerPhone}</p>
+                               </div>
+                            </div>
                          </div>
                       </div>
                    </div>
@@ -984,6 +1087,81 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
             <div className="flex gap-4">
               <button onClick={() => setConfirmCancelId(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Kembali</button>
               <button onClick={() => handleCancelService(confirmCancelId)} className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-red-600/20">Ya, Batalkan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Confirmation Modal */}
+      {showRefundConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl p-8 text-center animate-in zoom-in duration-300 border border-rose-200">
+            <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <RotateCcw size={32} />
+            </div>
+            <h4 className="text-xl font-black text-slate-900 mb-2 uppercase">Konfirmasi Pengembalian Dana</h4>
+            <div className="text-slate-500 text-sm mb-8 font-bold space-y-2">
+              <p>Anda akan melakukan refund untuk service ini.</p>
+              <div className="bg-rose-50 p-3 rounded-xl border border-rose-100 text-rose-700 text-xs">
+                <p>⚠️ Peringatan: Saldo kas akan dipotong otomatis dan stok sparepart yang digunakan akan dikembalikan ke inventaris.</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <button onClick={() => setShowRefundConfirm(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Batal</button>
+              <button onClick={() => handleRefundService(showRefundConfirm)} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-rose-600/20">Proses Refund</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer History Modal */}
+      {showHistoryModal && viewingService && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-300 max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0 bg-slate-50">
+               <div>
+                  <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                    <History size={20} className="text-blue-600" /> Riwayat Service
+                  </h4>
+                  <p className="text-xs font-bold text-slate-500 mt-1">{viewingService.customerName} • {viewingService.customerPhone}</p>
+               </div>
+               <button onClick={() => setShowHistoryModal(false)} className="p-2 hover:bg-slate-200 rounded-full transition-all text-slate-500"><X size={20} /></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                {customerHistory.map(h => {
+                   const statusInfo = getStatusConfig(h.status);
+                   return (
+                    <div 
+                      key={h.id} 
+                      onClick={() => {
+                        setViewingService(h);
+                        setShowHistoryModal(false);
+                      }}
+                      className="p-4 rounded-2xl border-2 border-slate-100 hover:border-blue-300 hover:bg-blue-50/50 transition-all cursor-pointer group bg-white"
+                    >
+                        <div className="flex justify-between items-center mb-3">
+                             <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-md uppercase font-mono">
+                                  {formatDate(h.timestamp)}
+                                </span>
+                                <div className={`px-2 py-1 rounded-md border flex items-center gap-1 ${statusInfo.color}`}>
+                                    <statusInfo.icon size={10} />
+                                    <span className="text-[9px] font-black uppercase">{statusInfo.label}</span>
+                                </div>
+                             </div>
+                             <span className="text-slate-900 font-black text-sm">{formatCurrency(h.totalCost)}</span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <h5 className="font-black text-slate-900 text-sm">{h.deviceModel}</h5>
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-1 italic">"{h.problemDescription}"</p>
+                            </div>
+                            <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                        </div>
+                    </div>
+                   );
+                })}
             </div>
           </div>
         </div>
