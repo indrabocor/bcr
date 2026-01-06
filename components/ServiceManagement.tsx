@@ -376,8 +376,33 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
   };
 
   const shareToWhatsApp = () => {
-    const text = `Halo ${viewingService?.customerName}, nota service Anda (${viewingService?.id}) telah kami proses. Perangkat: ${viewingService?.deviceModel}. Total: ${formatCurrency(viewingService?.totalCost || 0)}. Terimakasih!`;
-    window.open(`https://wa.me/${viewingService?.customerPhone.replace(/^0/, '62')}?text=${encodeURIComponent(text)}`, '_blank');
+    if (!viewingService) return;
+
+    // Sanitize phone number (remove non-digits)
+    let phone = viewingService.customerPhone.replace(/\D/g, '');
+    
+    // Convert '08' to '628'
+    if (phone.startsWith('0')) {
+        phone = '62' + phone.substring(1);
+    }
+
+    const statusLabel = getStatusConfig(viewingService.status).label;
+    
+    const text = `*NOTA SERVICE DIGITAL - BCR SERVICE HP*
+--------------------------------
+Halo Kak *${viewingService.customerName}*,
+Berikut rincian service perangkat Anda:
+
+🆔 *No. Nota:* ${viewingService.id}
+📱 *Perangkat:* ${viewingService.deviceModel}
+🔧 *Keluhan:* ${viewingService.problemDescription}
+📊 *Status:* ${statusLabel}
+💰 *Total Biaya:* ${formatCurrency(viewingService.totalCost)}
+
+Terima kasih telah mempercayakan service kepada kami!
+_Simpan pesan ini sebagai bukti garansi._`;
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handlePatternClick = (dot: number) => {
@@ -845,6 +870,7 @@ const ServiceManagement: React.FC<ServiceManagementProps> = ({
                    </div>
                 </div>
                 <div className="flex gap-2">
+                   <button onClick={shareToWhatsApp} className="p-4 bg-green-50 text-green-600 rounded-2xl hover:bg-green-100 transition-all border border-green-200" title="Bagikan ke WhatsApp"><MessageCircle size={20} /></button>
                    <button onClick={handlePrint} className="p-4 bg-slate-100 text-slate-600 rounded-2xl hover:bg-slate-200 transition-all"><Printer size={20} /></button>
                    <button onClick={() => setViewingService(null)} className="p-4 bg-slate-100 text-slate-600 rounded-2xl hover:bg-red-50 hover:text-red-600 transition-all"><X size={20} /></button>
                 </div>
